@@ -1,0 +1,74 @@
+server:
+  port: 1998
+
+spring:
+  application:
+    name: josephine-backend
+
+  data:
+    mongodb:
+      username: josephine
+      password: admin@josephine
+      host: localhost
+      port: 27017
+      database: josephine-db
+      authentication-database: admin
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: fadzainherera9@gmail.com
+    password: kqxljajvysyowxgh
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 50MB
+      file-size-threshold: 2KB
+      resolve-lazily: false
+
+  task:
+    execution:
+      pool:
+        core-size: 2
+        max-size: 4
+        queue-capacity: 100
+
+    scheduling:
+      pool:
+        size: 2
+
+# Logging configuration
+logging:
+  level:
+    org.springframework.security: debug
+    org.springframework.web: debug
+    web: debug
+
+application:
+  security:
+    jwt:
+      secret-key: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+      expiration: 86400000 # a day
+      refresh-token:
+        expiration: 604800000 # 7 days
+
+# ML Configuration
+ml:
+  service:
+    url: http://localhost:8000
+    path: ./ml_service
+    python: python
+
+
+#ml.service.url=http://localhost:8000
+file:
+    upload-dir: ./uploads
+
