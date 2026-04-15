@@ -1,7 +1,9 @@
 package com.project.pricing.controller;
 
+import com.project.pricing.dto.ProductPriceResponse;
 import com.project.pricing.model.PriceRecord;
 import com.project.pricing.repository.PriceRecordRepository;
+import com.project.pricing.service.MarketDataService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,17 +20,12 @@ import java.util.stream.Collectors;
 @org.springframework.web.bind.annotation.CrossOrigin(origins = "*")
 public class PublicPriceController {
 
+    private final MarketDataService marketDataService;
     private final PriceRecordRepository priceRecordRepository;
 
     @GetMapping("/prices")
-    public List<PriceRecord> getLatestPrices(@RequestParam(required = false) String category) {
-        List<PriceRecord> records = priceRecordRepository.findAll();
-        if (category != null && !category.isEmpty()) {
-            return records.stream()
-                    .filter(r -> category.equalsIgnoreCase(r.getCategory()))
-                    .collect(Collectors.toList());
-        }
-        return records;
+    public List<ProductPriceResponse> getLatestPrices(@RequestParam(required = false) String category) {
+        return marketDataService.getProductsWithPrices(category);
     }
 
     @GetMapping("/stats")

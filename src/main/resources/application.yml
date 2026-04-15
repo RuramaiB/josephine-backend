@@ -45,6 +45,13 @@ spring:
       pool:
         size: 2
 
+  ai:
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        options:
+          model: llama3
+
 # Logging configuration
 logging:
   level:
@@ -67,8 +74,6 @@ ml:
     path: ./ml_service
     python: python
 
-
-#ml.service.url=http://localhost:8000
 file:
     upload-dir: ./uploads
 

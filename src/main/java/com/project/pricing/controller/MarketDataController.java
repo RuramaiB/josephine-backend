@@ -1,5 +1,6 @@
 package com.project.pricing.controller;
 
+import com.project.pricing.dto.ProductPriceResponse;
 import com.project.pricing.model.PriceRecord;
 import com.project.pricing.service.MarketDataService;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +17,7 @@ public class MarketDataController {
     private final MarketDataService marketDataService;
 
     @GetMapping("/products")
-    public ResponseEntity<List<com.project.pricing.dto.ProductPriceResponse>> getProductsByCategory(
+    public ResponseEntity<List<ProductPriceResponse>> getProductsByCategory(
             @RequestParam String category) {
         return ResponseEntity.ok(marketDataService.getProductsWithPrices(category));
     }
@@ -32,7 +33,7 @@ public class MarketDataController {
     }
 
     @GetMapping("/high-margins")
-    public ResponseEntity<List<com.project.pricing.dto.ProductPriceResponse>> getHighMargins() {
+    public ResponseEntity<List<ProductPriceResponse>> getHighMargins() {
         return ResponseEntity.ok(marketDataService.getHighMarginCommodities());
     }
 
@@ -44,6 +45,16 @@ public class MarketDataController {
     @GetMapping("/indices")
     public ResponseEntity<List<java.util.Map<String, Object>>> getRegionalIndices() {
         return ResponseEntity.ok(marketDataService.getRegionalIndices());
+    }
+
+    @GetMapping("/ai-insights")
+    public ResponseEntity<java.util.Map<String, String>> getAIInsights() {
+        return ResponseEntity.ok(java.util.Map.of("insight", marketDataService.getMarketInsights()));
+    }
+
+    @GetMapping("/trends")
+    public ResponseEntity<List<java.util.Map<String, Object>>> getTrends() {
+        return ResponseEntity.ok(marketDataService.getCommodityTrends());
     }
 
     /**
