@@ -41,21 +41,24 @@ public class ScrapingService {
                     .timeout(15000)
                     .get();
 
-            Elements products = doc.select(".product, .product-item, .item-product, .entry-product");
+            Elements products = doc.select(".product, .product-item, .item-product, .entry-product, .product-miniature, .list-product");
 
+            int count = 0;
             for (Element product : products) {
+                if (count >= 40) break;
                 String name = product.select(".woocommerce-loop-product__title, .product-title, .name, h2, h3")
                         .first() != null
                                 ? product.select(".woocommerce-loop-product__title, .product-title, .name, h2, h3")
                                         .first()
                                         .text()
                                 : "";
-                String priceStr = product.select(".price, .product-price, .amount").text();
+                String priceStr = product.select(".price, .product-price, .amount, .price-current").text();
 
                 if (!name.isEmpty() && !priceStr.isEmpty() && priceStr.matches(".*\\d.*")) {
                     double price = parsePrice(priceStr);
                     if (price > 0) {
                         marketDataService.trackProductPrice(name, "Generic", "RETAIL", "Unit", price, retailer, region);
+                        count++;
                     }
                 }
             }
@@ -78,10 +81,11 @@ public class ScrapingService {
                 Elements cols = row.select("td");
                 if (cols.size() >= 2) {
                     String name = cols.get(0).text();
+                    // Skip if not essential (Logic handled in marketDataService, but check here for efficiency)
                     String priceStr = cols.get(1).select(".priceValue").text();
                     if (!priceStr.isEmpty()) {
                         double price = parsePrice(priceStr);
-                        marketDataService.trackProductPrice(name, "Reference", "RETAIL", "Standard", price, "Numbeo",
+                        marketDataService.trackProductPrice(name, "Reference", "GROCERY", "Standard", price, "Numbeo",
                                 "Zimbabwe");
                     }
                 }

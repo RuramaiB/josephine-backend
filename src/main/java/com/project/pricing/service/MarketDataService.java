@@ -18,7 +18,28 @@ public class MarketDataService {
     private final PriceRecordRepository priceRecordRepository;
     private final GwatidzoIntelligenceService intelligenceService;
 
+    private static final List<String> BLACKLISTED_CATEGORIES = List.of(
+        "RESTAURANT", "SALARY", "MOTEL", "RENT", "ENTERTAINMENT", "APARTMENT", "CLOTHING"
+    );
+
+    private static final List<String> ESSENTIAL_KEYWORDS = List.of(
+        "MILK", "BREAD", "RICE", "EGGS", "CHEESE", "MEAT", "CHICKEN", "BEEF", "APPLE", "BANANA", 
+        "POTATO", "ONION", "LETTUCE", "WATER", "WINE", "BEER", "CIGARETTES", "PETROL", "DIESEL",
+        "MAIZE", "MEALIE", "SUGAR", "OIL", "SOAP", "FLOUR", "SALT", "PARAFFIN", "CANDLES", "MATCHES"
+    );
+
     public void recordPrice(String productId, double price, String source, String region) {
+        // Calculate statistical risk before saving
+        List<PriceRecord> history = priceRecordRepository.findByProductId(productId);
+        double avg = history.stream().mapToDouble(PriceRecord::getPrice).average().orElse(price);
+        double stdDev = Math.sqrt(history.stream()
+                .mapToDouble(p -> Math.pow(p.getPrice() - avg, 2))
+                .average().orElse(0.0));
+        
+        double zScore = (stdDev == 0) ? 0 : Math.abs(price - avg) / stdDev;
+        // Risk score based on Z-score (Z=2.0 is roughly 95% confidence of being an outlier)
+        double riskScore = Math.min(100.0, zScore * 25.0); // 4.0 Z-score = 100% risk
+
         PriceRecord record = PriceRecord.builder()
                 .productId(productId)
                 .price(price)
@@ -26,6 +47,8 @@ public class MarketDataService {
                 .region(region)
                 .timestamp(LocalDateTime.now())
                 .reliability(1.0)
+                .riskScore(riskScore)
+                .isAlert(zScore > 2.0 && price > avg) // Only alert if significantly higher than average
                 .build();
         priceRecordRepository.save(record);
     }
@@ -63,6 +86,9 @@ public class MarketDataService {
      */
     public void trackProductPrice(String name, String brand, String category, String unit, double price, String source,
             String region) {
+        if (!isBasicCommodity(name, category)) {
+            return; // Skip non-essential items
+        }
         Product product = productRepository.findByNameContainingIgnoreCase(name)
                 .stream()
                 .filter(p -> p.getBrand().equalsIgnoreCase(brand) && p.getUnitOfMeasure().equalsIgnoreCase(unit))
@@ -77,6 +103,51 @@ public class MarketDataService {
                     return productRepository.save(newProd);
                 });
         recordPrice(product.getId(), price, source, region);
+    }
+
+    private boolean isBasicCommodity(String name, String category) {
+        if (category != null && BLACKLISTED_CATEGORIES.stream().anyMatch(category.toUpperCase()::contains)) {
+            return false;
+        }
+        String upperName = name.toUpperCase();
+        return ESSENTIAL_KEYWORDS.stream().anyMatch(upperName::contains);
+    }
+
+    public List<Map<String, Object>> getUnstableProducts() {
+        LocalDateTime threeMonthsAgo = LocalDateTime.now().minusMonths(3);
+        List<Product> products = productRepository.findAll();
+        
+        return products.stream().map(p -> {
+            List<PriceRecord> records = priceRecordRepository.findByProductId(p.getId())
+                .stream()
+                .filter(r -> r.getTimestamp().isAfter(threeMonthsAgo))
+                .sorted((a, b) -> a.getTimestamp().compareTo(b.getTimestamp()))
+                .toList();
+
+            if (records.size() < 3) return null;
+
+            double firstPrice = records.get(0).getPrice();
+            double lastPrice = records.get(records.size() - 1).getPrice();
+            
+            // Count "hikes"
+            long hikes = 0;
+            for (int i = 1; i < records.size(); i++) {
+                if (records.get(i).getPrice() > records.get(i-1).getPrice()) hikes++;
+            }
+
+            if (hikes >= 2 && lastPrice > firstPrice) {
+                double totalIncrease = ((lastPrice - firstPrice) / firstPrice) * 100;
+                return Map.<String, Object>of(
+                    "productId", p.getId(),
+                    "name", p.getName(),
+                    "category", p.getCategory(),
+                    "hikeCount", hikes,
+                    "totalIncreasePct", totalIncrease,
+                    "currentPrice", lastPrice
+                );
+            }
+            return null;
+        }).filter(java.util.Objects::nonNull).toList();
     }
 
     /**
@@ -219,15 +290,43 @@ public class MarketDataService {
         }).filter(java.util.Objects::nonNull).limit(10).toList();
     }
 
-    /**
-     * Generates a live market summary using Ollama.
-     */
-    public String getMarketInsights() {
-        List<Map<String, Object>> trends = getCommodityTrends();
-        String summary = trends.stream()
-            .map(t -> String.format("%s (%s): %s by %.1f%%", t.get("name"), t.get("category"), t.get("trend"), t.get("changePct")))
-            .collect(java.util.stream.Collectors.joining(", "));
+    public void purgeNonEssentialData() {
+        List<Product> allProducts = productRepository.findAll();
+        for (Product p : allProducts) {
+            String category = p.getCategory();
+            if (!isBasicCommodity(p.getName(), category)) {
+                priceRecordRepository.deleteByProductId(p.getId());
+                productRepository.deleteById(p.getId());
+            }
+        }
+    }
 
-        return intelligenceService.generateGlobalMarketSummary(summary);
+    public List<java.util.Map<String, Object>> getComparison(String sourceA, String sourceB) {
+        List<Product> products = productRepository.findAll();
+        return products.stream().map(p -> {
+            List<PriceRecord> recordsA = priceRecordRepository.findByProductId(p.getId()).stream()
+                    .filter(r -> r.getSource().equalsIgnoreCase(sourceA))
+                    .sorted((a, b) -> b.getTimestamp().compareTo(a.getTimestamp()))
+                    .toList();
+            
+            List<PriceRecord> recordsB = priceRecordRepository.findByProductId(p.getId()).stream()
+                    .filter(r -> r.getSource().equalsIgnoreCase(sourceB))
+                    .sorted((a, b) -> b.getTimestamp().compareTo(a.getTimestamp()))
+                    .toList();
+
+            if (recordsA.isEmpty() || recordsB.isEmpty()) return null;
+
+            return java.util.Map.<String, Object>of(
+                "productId", p.getId(),
+                "name", p.getName(),
+                "brand", p.getBrand(),
+                "category", p.getCategory(),
+                "unit", p.getUnitOfMeasure(),
+                "priceA", recordsA.get(0).getPrice(),
+                "priceB", recordsB.get(0).getPrice(),
+                "diff", recordsA.get(0).getPrice() - recordsB.get(0).getPrice(),
+                "diffPct", ((recordsA.get(0).getPrice() - recordsB.get(0).getPrice()) / recordsB.get(0).getPrice()) * 100
+            );
+        }).filter(java.util.Objects::nonNull).toList();
     }
 }

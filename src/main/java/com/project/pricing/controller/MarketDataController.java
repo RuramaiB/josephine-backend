@@ -15,6 +15,13 @@ import java.util.List;
 @CrossOrigin(origins = "*")
 public class MarketDataController {
     private final MarketDataService marketDataService;
+    private final com.project.pricing.service.InsightCacheService insightCacheService;
+
+    @PostMapping("/purge")
+    public ResponseEntity<String> purgeData() {
+        marketDataService.purgeNonEssentialData();
+        return ResponseEntity.ok("Non-essential data purged successfully.");
+    }
 
     @GetMapping("/products")
     public ResponseEntity<List<ProductPriceResponse>> getProductsByCategory(
@@ -49,7 +56,18 @@ public class MarketDataController {
 
     @GetMapping("/ai-insights")
     public ResponseEntity<java.util.Map<String, String>> getAIInsights() {
-        return ResponseEntity.ok(java.util.Map.of("insight", marketDataService.getMarketInsights()));
+        return ResponseEntity.ok(insightCacheService.getLatestInsight());
+    }
+
+    @PostMapping("/ai-insights/refresh")
+    public ResponseEntity<String> refreshAIInsights() {
+        insightCacheService.updateInsightAsync();
+        return ResponseEntity.ok("AI Insight refresh triggered in background.");
+    }
+
+    @GetMapping("/stability")
+    public ResponseEntity<List<java.util.Map<String, Object>>> getStabilityTrends() {
+        return ResponseEntity.ok(marketDataService.getUnstableProducts());
     }
 
     @GetMapping("/trends")

@@ -14,4 +14,6 @@ public interface PriceRecordRepository extends MongoRepository<PriceRecord, Stri
     List<PriceRecord> findByRegion(String region);
 
     List<PriceRecord> findBySourceAndRegion(String source, String region);
+    
+    void deleteByProductId(String productId);
 }

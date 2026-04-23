@@ -34,11 +34,26 @@ public class PublicPriceController {
         long alertsCount = records.stream().filter(PriceRecord::isAlert).count();
         double avgRisk = records.stream().mapToDouble(PriceRecord::getRiskScore).average().orElse(0.0);
 
+        Map<String, List<PriceRecord>> regionalGroup = records.stream()
+            .filter(r -> r.getRegion() != null)
+            .collect(Collectors.groupingBy(PriceRecord::getRegion));
+
+        Map<String, Object> regionalStats = regionalGroup.entrySet().stream()
+            .collect(Collectors.toMap(
+                Map.Entry::getKey,
+                e -> Map.of(
+                    "avgPrice", e.getValue().stream().mapToDouble(PriceRecord::getPrice).average().orElse(0.0),
+                    "alerts", e.getValue().stream().filter(PriceRecord::isAlert).count()
+                )
+            ));
+
         return Map.of(
                 "totalRecords", records.size(),
                 "activeAlerts", alertsCount,
                 "averageMarketRisk", avgRisk,
-                "sourcesCount", records.stream().map(PriceRecord::getSource).distinct().count());
+                "sourcesCount", records.stream().map(PriceRecord::getSource).distinct().count(),
+                "regionalBreakdown", regionalStats,
+                "lastUpdate", records.isEmpty() ? "N/A" : records.get(records.size() - 1).getTimestamp().toString());
     }
 
     @GetMapping("/categories")
@@ -48,5 +63,18 @@ public class PublicPriceController {
                 .filter(c -> c != null && !c.isEmpty())
                 .distinct()
                 .collect(Collectors.toList());
+    }
+
+    @GetMapping("/compare")
+    public List<Map<String, Object>> compareSources(
+            @RequestParam String sourceA, 
+            @RequestParam String sourceB) {
+        return marketDataService.getComparison(sourceA, sourceB);
+    }
+
+    @GetMapping("/sources")
+    public List<String> getSources() {
+        return marketDataService.getDataSourceStatus().stream()
+            .map(m -> m.get("name").toString().replace(" Scraper", "")).toList();
     }
 }
