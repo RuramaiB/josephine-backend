@@ -25,10 +25,25 @@ public class ScrapingService {
         scrapeGMB();
         scrapeZERA();
         scrapeTM();
+        scrapeOKZimbabwe();
+        scrapeSpar();
+        scrapeChoppies();
     }
 
     public void scrapeTM() {
         scrapeGenericRetailer("TM Pick n Pay", "https://tmpnponline.co.zw/shop/", "Harare");
+    }
+
+    public void scrapeOKZimbabwe() {
+        scrapeGenericRetailer("OK Zimbabwe", "https://okzim.co.zw/product-category/groceries/", "National");
+    }
+
+    public void scrapeSpar() {
+        scrapeGenericRetailer("Spar Zimbabwe", "https://spar.co.zw/shop/", "National");
+    }
+
+    public void scrapeChoppies() {
+        scrapeGenericRetailer("Choppies", "https://choppies.co.zw/product-category/grocery/", "National");
     }
 
     public void scrapeGenericRetailer(String retailer, String url, String region) {
@@ -45,7 +60,7 @@ public class ScrapingService {
 
             int count = 0;
             for (Element product : products) {
-                if (count >= 40) break;
+                if (count >= 120) break; // Increased to 120 products per store
                 String name = product.select(".woocommerce-loop-product__title, .product-title, .name, h2, h3")
                         .first() != null
                                 ? product.select(".woocommerce-loop-product__title, .product-title, .name, h2, h3")

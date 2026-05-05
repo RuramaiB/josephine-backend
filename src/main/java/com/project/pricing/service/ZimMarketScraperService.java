@@ -23,12 +23,11 @@ public class ZimMarketScraperService {
     public void scrapeRetailPrices() {
         log.info("Starting Gwatidzo automated national market audit...");
 
-        // TM Pick n Pay Branches
-        scrapingService.scrapeGenericRetailer("TM Pick n Pay", "https://tmpnponline.co.zw/shop/", "Harare");
-
         // National Retailers (Generic Jsoup implementation)
-        scrapingService.scrapeGenericRetailer("Choppies", "https://choppies.co.zw", "National");
-        scrapingService.scrapeGenericRetailer("Spar Zimbabwe", "https://spar.co.zw", "National");
+        scrapingService.scrapeTM();
+        scrapingService.scrapeOKZimbabwe();
+        scrapingService.scrapeSpar();
+        scrapingService.scrapeChoppies();
 
         // Fuel Monitoring Expansion (Regional Hubs)
         marketDataService.updateFuelPrice("Petrol (Blend)", 1.62, "ZERA Feed", "Harare");

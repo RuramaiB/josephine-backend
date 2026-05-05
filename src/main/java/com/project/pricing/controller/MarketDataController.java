@@ -16,6 +16,15 @@ import java.util.List;
 public class MarketDataController {
     private final MarketDataService marketDataService;
     private final com.project.pricing.service.InsightCacheService insightCacheService;
+    private final com.project.pricing.service.GwatidzoIntelligenceService intelligenceService;
+
+    @PostMapping("/ai-chat")
+    public ResponseEntity<java.util.Map<String, String>> aiChat(@RequestBody java.util.Map<String, String> request) {
+        String query = request.get("query");
+        String context = marketDataService.getMarketSummaryContext();
+        String response = intelligenceService.queryMarketAI(query, context);
+        return ResponseEntity.ok(java.util.Map.of("response", response));
+    }
 
     @PostMapping("/purge")
     public ResponseEntity<String> purgeData() {

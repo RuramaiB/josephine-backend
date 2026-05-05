@@ -25,7 +25,11 @@ public class MarketDataService {
     private static final List<String> ESSENTIAL_KEYWORDS = List.of(
         "MILK", "BREAD", "RICE", "EGGS", "CHEESE", "MEAT", "CHICKEN", "BEEF", "APPLE", "BANANA", 
         "POTATO", "ONION", "LETTUCE", "WATER", "WINE", "BEER", "CIGARETTES", "PETROL", "DIESEL",
-        "MAIZE", "MEALIE", "SUGAR", "OIL", "SOAP", "FLOUR", "SALT", "PARAFFIN", "CANDLES", "MATCHES"
+        "MAIZE", "MEALIE", "SUGAR", "OIL", "SOAP", "FLOUR", "SALT", "PARAFFIN", "CANDLES", "MATCHES",
+        "PASTA", "SPAGHETTI", "MACARONI", "YOGURT", "JUICE", "CEREAL", "OATS", "COFFEE", "TEA", "JAM",
+        "BUTTER", "MARGARINE", "SAUSAGE", "PORK", "FISH", "TUNA", "BEANS", "PEAS", "CARROT", "CABBAGE",
+        "TOILET", "TISSUE", "SHAMPOO", "DETOL", "CLOROX", "JIK", "BOOM", "MAZOROE", "SUNLIGHT", "SURF",
+        "VASELINE", "LOTION", "NAPPIES", "BABY", "FORMULA", "CUSTARD", "BISCUITS", "SNACKS", "CHIPS"
     );
 
     public void recordPrice(String productId, double price, String source, String region) {
@@ -328,5 +332,14 @@ public class MarketDataService {
                 "diffPct", ((recordsA.get(0).getPrice() - recordsB.get(0).getPrice()) / recordsB.get(0).getPrice()) * 100
             );
         }).filter(java.util.Objects::nonNull).toList();
+    }
+
+    public String getMarketSummaryContext() {
+        List<ProductPriceResponse> products = getProductsWithPrices(null);
+        return products.stream()
+            .limit(100)
+            .map(p -> String.format("Product: %s, Brand: %s, Price: %.2f USD, Source: %s, Risk: %.1f%%", 
+                p.getName(), p.getBrand(), p.getCurrentPrice(), p.getRetailer(), p.getRiskScore()))
+            .collect(java.util.stream.Collectors.joining("\n"));
     }
 }

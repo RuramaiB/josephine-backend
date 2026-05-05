@@ -48,10 +48,6 @@ public class GwatidzoIntelligenceService {
 
             String userPrompt = "Product ID: " + productId + "\nHistorical Data:\n" + historyData;
 
-            // In a real scenario, we'd use StructuredOutputConverter
-            // For this implementation, we'll parse the AI response or use the ChatClient
-            
-            // Note: If no API key is provided, this will throw an exception which we handle below
             String response = chatModel.call(new Prompt(List.of(
                     new SystemMessage(systemPrompt),
                     new UserMessage(userPrompt)
@@ -59,7 +55,6 @@ public class GwatidzoIntelligenceService {
 
             log.info("AI Analysis Response for {}: {}", productId, response);
             
-            // Simple extraction (assuming LLM followed JSON instruction)
             return parseAiResponse(productId, response);
 
         } catch (Exception e) {
@@ -73,26 +68,22 @@ public class GwatidzoIntelligenceService {
         double avg = history.stream().mapToDouble(PriceRecord::getPrice).average().orElse(0.0);
         double last = history.get(history.size() - 1).getPrice();
         
-        // Simple linear extrapolation for next price
         double trend = (last - history.get(0).getPrice()) / Math.max(1, history.size() - 1);
         double prediction = last + trend;
         
-        // Anomaly detection: > 20% deviation from average
         boolean isAnomaly = Math.abs(last - avg) / avg > 0.20;
 
         MLPredictionResponseDTO dto = new MLPredictionResponseDTO();
         dto.setProductId(productId);
         dto.setPredictedPrice(prediction);
-        dto.setConfidence(0.85); // High confidence for statistical models
+        dto.setConfidence(0.85);
         dto.setAnomaly(isAnomaly);
         dto.setAnomalyProbability(isAnomaly ? 0.9 : 0.05);
         return dto;
     }
 
     private MLPredictionResponseDTO parseAiResponse(String productId, String json) {
-        // Fallback to statistical if AI response is garbled
         try {
-            // Very basic extraction for demo purposes
             double predicted = Double.parseDouble(extractValue(json, "predictedPrice"));
             double confidence = Double.parseDouble(extractValue(json, "confidence"));
             boolean anomaly = json.contains("\"isAnomaly\": true");
@@ -146,7 +137,37 @@ public class GwatidzoIntelligenceService {
             ))).getResult().getOutput().getContent();
         } catch (Exception e) {
             log.error("AI Global Summary failed: {}", e.getMessage());
-            return "Market remains stable with minor fluctuations in retail commodities. Continue monitoring regulated fuel sectors for accuracy.";
+            return "Market remains stable with minor fluctuations in retail commodities.";
+        }
+    }
+
+    /**
+     * Handles natural language queries about the market using Ollama.
+     * Injects current market data as context.
+     */
+    public String queryMarketAI(String query, String marketContext) {
+        try {
+            String systemPrompt = String.format("""
+                You are the Gwatidzo Market Intelligence AI for Zimbabwe.
+                Your goal is to provide accurate price predictions and market analysis based on real data.
+                
+                CURRENT MARKET CONTEXT:
+                %s
+                
+                INSTRUCTIONS:
+                1. Use the provided context to answer questions about prices, trends, and predictions.
+                2. If the user asks for a prediction (e.g., 'sugar in 3 months'), analyze historical trends in the context.
+                3. Be professional, concise, and highlight if certain prices are highly volatile.
+                4. Always specify that these are AI-driven estimates based on current hub data.
+                """, marketContext);
+
+            return chatModel.call(new Prompt(List.of(
+                    new SystemMessage(systemPrompt),
+                    new UserMessage(query)
+            ))).getResult().getOutput().getContent();
+        } catch (Exception e) {
+            log.error("AI Query failed: {}", e.getMessage());
+            return "I'm currently recalibrating my market nodes. Please try again shortly.";
         }
     }
 }
