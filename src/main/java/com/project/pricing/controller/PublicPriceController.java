@@ -59,6 +59,8 @@ public class PublicPriceController {
     @GetMapping("/categories")
     public List<String> getCategories() {
         return priceRecordRepository.findAll().stream()
+                .filter(r -> r.getSource() != null && !"Numbeo".equalsIgnoreCase(r.getSource()))
+                .filter(r -> !("FUEL".equalsIgnoreCase(r.getCategory()) && !"ZERA".equalsIgnoreCase(r.getSource())))
                 .map(PriceRecord::getCategory)
                 .filter(c -> c != null && !c.isEmpty())
                 .distinct()

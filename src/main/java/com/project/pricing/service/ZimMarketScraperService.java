@@ -24,14 +24,9 @@ public class ZimMarketScraperService {
         log.info("Starting Gwatidzo automated national market audit...");
 
         // National Retailers (Generic Jsoup implementation)
-        scrapingService.scrapeTM();
-        scrapingService.scrapeOKZimbabwe();
-        scrapingService.scrapeSpar();
-        scrapingService.scrapeChoppies();
+        scrapingService.scrapeAll();
 
-        // Fuel Monitoring Expansion (Regional Hubs)
-        marketDataService.updateFuelPrice("Petrol (Blend)", 1.62, "ZERA Feed", "Harare");
-        marketDataService.updateFuelPrice("Diesel (50)", 1.68, "ZERA Feed", "Bulawayo");
+        // Fuel Monitoring is handled via scrapingService.scrapeZERA() called in scrapeAll()
 
         log.info("National Market audit completed.");
     }
