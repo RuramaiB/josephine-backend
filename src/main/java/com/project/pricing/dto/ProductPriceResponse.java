@@ -20,11 +20,12 @@ public class ProductPriceResponse {
     private String retailer;
     private String region;
     private String lastUpdated;
+    private String link;
     private boolean alert;
     private double riskScore;
 
     public static ProductPriceResponse fromProduct(Product product, double price, String retailer, String region,
-            String timestamp, boolean alert, double riskScore) {
+            String timestamp, String link, boolean alert, double riskScore) {
         return ProductPriceResponse.builder()
                 .id(product.getId())
                 .name(product.getName())
@@ -35,6 +36,7 @@ public class ProductPriceResponse {
                 .retailer(retailer)
                 .region(region)
                 .lastUpdated(timestamp)
+                .link(link)
                 .alert(alert)
                 .riskScore(riskScore)
                 .build();

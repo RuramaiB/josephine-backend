@@ -26,6 +26,7 @@ public class ScrapingService {
         scrapeZERA();
         scrapeTM();
         scrapeSpar();
+        scrapeStandardizedPool();
         // Disabled per user request
         // scrapeOKZimbabwe();
         // scrapeSpar(); // Spar is now handled separately
@@ -48,16 +49,20 @@ public class ScrapingService {
                         .get();
                 
                 String json = doc.text();
-                // Basic JSON parsing without a library (using regex for simplicity in this environment)
-                Pattern p = Pattern.compile("\\{\"id\":\\d+,\"product_name\":\"(.*?)\",\"slug\":\".*?\",\"price\":(\\d+\\.?\\d*)");
+                // Robust regex for TM JSON (name, slug, price)
+                Pattern p = Pattern.compile("\"id\":\\d+.*?\"name\":\"(.*?)\".*?\"slug\":\"(.*?)\".*?\"price\":\"?(\\d+\\.?\\d*)\"?");
                 Matcher m = p.matcher(json);
                 
                 int count = 0;
                 while (m.find() && count < 100) {
                     String name = m.group(1);
-                    double price = Double.parseDouble(m.group(2));
+                    String slug = m.group(2);
+                    double price = Double.parseDouble(m.group(3));
                     String category = cat.toUpperCase();
-                    marketDataService.trackProductPrice(name, "Generic", category, "Unit", price, "TM Pick n Pay", "Harare");
+                    // Public URL construction
+                    String link = "https://tmpnponline.co.zw/product/" + slug;
+                    
+                    marketDataService.trackProductPrice(name, "Generic", category, "Unit", price, "TM Pick n Pay", "Harare", link);
                     count++;
                     total++;
                 }
@@ -69,8 +74,8 @@ public class ScrapingService {
     }
 
     public void scrapeSpar() {
-        scrapeGenericRetailer("Spar Groceries", "https://www.spar.co.zw/products/department/1/groceries", "National", ".product-listing ul li", ".listing-details p", ".product-links strong");
-        scrapeGenericRetailer("Spar Butchery", "https://www.spar.co.zw/products/department/7/butchery", "National", ".product-listing ul li", ".listing-details p", ".product-links strong");
+        scrapeGenericRetailer("Spar Zimbabwe", "https://www.spar.co.zw/products/department/1/groceries", "National", ".product-listing ul li", ".listing-details p", ".product-links strong");
+        scrapeGenericRetailer("Spar Zimbabwe", "https://www.spar.co.zw/products/department/7/butchery", "National", ".product-listing ul li", ".listing-details p", ".product-links strong");
     }
 
     public void scrapeGenericRetailer(String retailer, String url, String region, String containerSel, String nameSel, String priceSel) {
@@ -92,6 +97,9 @@ public class ScrapingService {
                         ? product.select(nameSel).first().text()
                         : "";
                 String priceStr = product.select(priceSel).text();
+                String link = product.select("a").first() != null 
+                        ? product.select("a").first().attr("abs:href") 
+                        : url;
 
                 if (!name.isEmpty() && !priceStr.isEmpty() && priceStr.matches(".*\\d.*")) {
                     double price = parsePrice(priceStr);
@@ -99,7 +107,7 @@ public class ScrapingService {
                         String category = "GROCERY";
                         if (retailer.toLowerCase().contains("butchery")) category = "BUTCHERY";
                         
-                        marketDataService.trackProductPrice(name, "Generic", category, "Unit", price, retailer, region);
+                        marketDataService.trackProductPrice(name, "Generic", category, "Unit", price, retailer, region, link);
                         count++;
                     }
                 }
@@ -137,7 +145,7 @@ public class ScrapingService {
                     if (!priceStr.isEmpty()) {
                         double price = parsePrice(priceStr);
                         marketDataService.trackProductPrice(name, "Reference", "AGRICULTURE", "Standard", price, "Numbeo",
-                                "Zimbabwe");
+                                "Zimbabwe", null);
                     }
                 }
             }
@@ -157,7 +165,7 @@ public class ScrapingService {
                 String priceStr = item.select(".sc_price_item_price_value").text();
                 if (!priceStr.isEmpty()) {
                     double price = parsePrice(priceStr);
-                    marketDataService.trackProductPrice(name, "GMB", "AGRICULTURE", "Tonne", price, "GMB", "National");
+                    marketDataService.trackProductPrice(name, "GMB", "AGRICULTURE", "Tonne", price, "GMB", "National", "https://gmbdura.co.zw/pricing/");
                 }
             }
         } catch (Exception e) {
@@ -182,7 +190,7 @@ public class ScrapingService {
                 double price = Double.parseDouble(matcher.group(2));
                 String name = type.contains("Petrol") ? "Petrol Blend (E20)" : "Diesel 50";
                 
-                marketDataService.trackProductPrice(name, "ZERA", "FUEL", "Litre", price, "ZERA", "National");
+                marketDataService.trackProductPrice(name, "ZERA", "FUEL", "Litre", price, "ZERA", "National", "https://www.zera.co.zw/");
                 log.info("Recorded ZERA fuel price: {} = {}", name, price);
                 found = true;
             }
@@ -193,6 +201,49 @@ public class ScrapingService {
             }
         } catch (Exception e) {
             log.error("Error scraping ZERA: ", e);
+        }
+    }
+
+    public void scrapeStandardizedPool() {
+        String[] pool = {"Rice 2kg", "Sugar 2kg", "Cooking Oil 2L", "Washing Powder 2kg", "Bath Soap", "Mealie Meal 10kg"};
+        log.info("Scraping standardized pool of essential commodities from TM and Spar...");
+        
+        for (String query : pool) {
+            // Spar Search
+            String sparUrl = "https://www.spar.co.zw/products?q=" + query.replace(" ", "%20");
+            scrapeGenericRetailer("Spar Zimbabwe", sparUrl, "National", ".product-listing ul li", ".listing-details p", ".product-links strong");
+            
+            // TM Pick n Pay Search (using their public search API)
+            scrapeTMSearch(query);
+        }
+    }
+
+    public void scrapeTMSearch(String query) {
+        try {
+            String apiUrl = "https://api.tmpnponline.co.zw/api/v1/products?name=" + query.replace(" ", "%20") + "&page=1";
+            Document doc = Jsoup.connect(apiUrl)
+                    .ignoreContentType(true)
+                    .userAgent("Mozilla/5.0")
+                    .get();
+            
+            String json = doc.text();
+            // Robust regex for TM Search JSON (id, name, slug, price)
+            Pattern p = Pattern.compile("\"id\":(\\d+).*?\"name\":\"(.*?)\".*?\"slug\":\"(.*?)\".*?\"price\":\"?(\\d+\\.?\\d*)\"?");
+            Matcher m = p.matcher(json);
+            
+            int count = 0;
+            while (m.find() && count < 10) {
+                String id = m.group(1);
+                String name = m.group(2);
+                String slug = m.group(3);
+                double price = Double.parseDouble(m.group(4));
+                String link = "https://tmpnponline.co.zw/product/" + slug;
+                
+                marketDataService.trackProductPrice(name, "Generic", "GROCERY", "Unit", price, "TM Pick n Pay", "National", link);
+                count++;
+            }
+        } catch (Exception e) {
+            log.error("Error searching TM Pick n Pay for {}: {}", query, e.getMessage());
         }
     }
 

@@ -27,6 +27,7 @@ public class PriceRecord {
     private String category; // e.g., Grocery, Fuel, Grain
     private String unit; // e.g., 1L, 1kg
     private String region; // e.g., Harare, Bulawayo, Mutare
+    private String link; // Direct source URL
     private double reliability; // 0.0 to 1.0
     private boolean isAlert;
     private double riskScore;

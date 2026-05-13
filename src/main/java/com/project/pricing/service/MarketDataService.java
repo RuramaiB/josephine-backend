@@ -32,7 +32,7 @@ public class MarketDataService {
         "VASELINE", "LOTION", "NAPPIES", "BABY", "FORMULA", "CUSTARD", "BISCUITS", "SNACKS", "CHIPS"
     );
 
-    public void recordPrice(String productId, double price, String source, String region) {
+    public void recordPrice(String productId, double price, String source, String region, String link) {
         // Calculate statistical risk before saving
         List<PriceRecord> history = priceRecordRepository.findByProductId(productId);
         double avg = history.stream().mapToDouble(PriceRecord::getPrice).average().orElse(price);
@@ -49,6 +49,7 @@ public class MarketDataService {
                 .price(price)
                 .source(source)
                 .region(region)
+                .link(link)
                 .timestamp(LocalDateTime.now())
                 .reliability(1.0)
                 .riskScore(riskScore)
@@ -82,14 +83,14 @@ public class MarketDataService {
                     return productRepository.save(newFuel);
                 });
 
-        recordPrice(fuel.getId(), price, station, region);
+        recordPrice(fuel.getId(), price, station, region, null);
     }
 
     /**
      * Generic track method to ensure Product existence and record price
      */
     public void trackProductPrice(String name, String brand, String category, String unit, double price, String source,
-            String region) {
+            String region, String link) {
         if (!isBasicCommodity(name, category)) {
             return; // Skip non-essential items
         }
@@ -99,20 +100,33 @@ public class MarketDataService {
             return;
         }
 
-        Product product = productRepository.findByNameContainingIgnoreCase(name)
+        String normalizedName = normalizeProductName(name);
+        Product product = productRepository.findByNameContainingIgnoreCase(normalizedName)
                 .stream()
                 .filter(p -> p.getBrand().equalsIgnoreCase(brand) && p.getUnitOfMeasure().equalsIgnoreCase(unit))
                 .findFirst()
                 .orElseGet(() -> {
                     Product newProd = Product.builder()
-                            .name(name)
+                            .name(normalizedName)
                             .brand(brand)
                             .category(category)
                             .unitOfMeasure(unit)
                             .build();
                     return productRepository.save(newProd);
                 });
-        recordPrice(product.getId(), price, source, region);
+        recordPrice(product.getId(), price, source, region, link);
+    }
+
+    private String normalizeProductName(String name) {
+        if (name == null) return "";
+        return name.toUpperCase()
+            .replace("SPAR ", "")
+            .replace("TM ", "")
+            .replace("PICK N PAY ", "")
+            .replace("PNP ", "")
+            .replace("OK ", "")
+            .replace("CHOPPIES ", "")
+            .trim();
     }
 
     private boolean isBasicCommodity(String name, String category) {
@@ -161,42 +175,46 @@ public class MarketDataService {
     }
 
     /**
-     * Retrieves products along with their latest verified price point.
+     * Retrieves products along with their latest verified price point per source.
      */
     public List<ProductPriceResponse> getProductsWithPrices(String category) {
         List<Product> products = (category == null || category.isEmpty()) 
                 ? productRepository.findAll() 
                 : productRepository.findByCategory(category);
                 
-        // Fetch all price records once to avoid N+1
-        List<PriceRecord> allLatestRecords = priceRecordRepository.findAll();
-        Map<String, PriceRecord> latestByProduct = allLatestRecords.stream()
-                .filter(r -> r.getProductId() != null)
-                .collect(java.util.stream.Collectors.toMap(
+        // Fetch all price records
+        List<PriceRecord> allRecords = priceRecordRepository.findAll();
+        
+        // Group by productID and source, then take the latest for each group
+        Map<String, Map<String, PriceRecord>> latestByProdAndSource = allRecords.stream()
+                .filter(r -> r.getProductId() != null && r.getSource() != null)
+                .collect(java.util.stream.Collectors.groupingBy(
                     PriceRecord::getProductId,
-                    r -> r,
-                    (existing, replacement) -> {
-                        if (existing.getTimestamp() == null) return replacement;
-                        if (replacement.getTimestamp() == null) return existing;
-                        return replacement.getTimestamp().isAfter(existing.getTimestamp()) ? replacement : existing;
-                    }
+                    java.util.stream.Collectors.toMap(
+                        PriceRecord::getSource,
+                        r -> r,
+                        (existing, replacement) -> {
+                            if (existing.getTimestamp() == null) return replacement;
+                            if (replacement.getTimestamp() == null) return existing;
+                            return replacement.getTimestamp().isAfter(existing.getTimestamp()) ? replacement : existing;
+                        }
+                    )
                 ));
 
-        return products.stream().map(p -> {
-            PriceRecord latest = latestByProduct.get(p.getId());
+        return products.stream().flatMap(p -> {
+            Map<String, PriceRecord> sourceRecords = latestByProdAndSource.get(p.getId());
+            if (sourceRecords == null) return java.util.stream.Stream.empty();
 
-            // Filter out Numbeo and non-ZERA fuel
-            if (latest != null) {
+            return sourceRecords.values().stream().map(latest -> {
+                // Filter out Numbeo and non-ZERA fuel
                 if ("Numbeo".equalsIgnoreCase(latest.getSource())) return null;
                 if ("FUEL".equalsIgnoreCase(p.getCategory()) && !"ZERA".equalsIgnoreCase(latest.getSource())) return null;
-            } else {
-                return null; // Don't show products with no prices
-            }
 
-            return com.project.pricing.dto.ProductPriceResponse.fromProduct(
-                p, latest.getPrice(), latest.getSource(), latest.getRegion(), latest.getTimestamp().toString(),
-                latest.isAlert(), latest.getRiskScore());
-        }).filter(java.util.Objects::nonNull).toList();
+                return com.project.pricing.dto.ProductPriceResponse.fromProduct(
+                    p, latest.getPrice(), latest.getSource(), latest.getRegion(), latest.getTimestamp().toString(),
+                    latest.getLink(), latest.isAlert(), latest.getRiskScore());
+            }).filter(java.util.Objects::nonNull);
+        }).collect(java.util.stream.Collectors.toList());
     }
 
     public com.project.pricing.dto.MarketStatsDTO getStats() {
@@ -243,7 +261,7 @@ public class MarketDataService {
                 PriceRecord latest = records.get(records.size() - 1);
                 return ProductPriceResponse.fromProduct(
                         p, latest.getPrice(), latest.getSource(), latest.getRegion(), latest.getTimestamp().toString(),
-                        latest.isAlert(), latest.getRiskScore());
+                        latest.getLink(), latest.isAlert(), latest.getRiskScore());
             }
             return null;
         }).filter(java.util.Objects::nonNull).toList();
@@ -276,7 +294,7 @@ public class MarketDataService {
         double nationalAvg = allRecords.stream().mapToDouble(PriceRecord::getPrice).average().orElse(1.0);
 
         Map<String, List<PriceRecord>> grouped = allRecords.stream()
-                .filter(r -> r.getRegion() != null)
+                .filter(r -> r.getRegion() != null && !"Numbeo".equalsIgnoreCase(r.getSource()))
                 .collect(java.util.stream.Collectors.groupingBy(PriceRecord::getRegion));
 
         return grouped.entrySet().stream().map(entry -> {
@@ -297,7 +315,9 @@ public class MarketDataService {
     public List<Map<String, Object>> getCommodityTrends() {
         List<Product> products = productRepository.findAll();
         return products.stream().map(p -> {
-            List<PriceRecord> records = priceRecordRepository.findByProductId(p.getId());
+            List<PriceRecord> records = priceRecordRepository.findByProductId(p.getId()).stream()
+                .filter(r -> !"Numbeo".equalsIgnoreCase(r.getSource()))
+                .toList();
             if (records.size() < 2) return null;
 
             PriceRecord latest = records.get(records.size() - 1);
@@ -341,7 +361,8 @@ public class MarketDataService {
                     .sorted((a, b) -> b.getTimestamp().compareTo(a.getTimestamp()))
                     .toList();
 
-            if (recordsA.isEmpty() || recordsB.isEmpty()) return null;
+            if (recordsA.isEmpty() || recordsB.isEmpty() || 
+                "Numbeo".equalsIgnoreCase(sourceA) || "Numbeo".equalsIgnoreCase(sourceB)) return null;
 
             return java.util.Map.<String, Object>of(
                 "productId", p.getId(),

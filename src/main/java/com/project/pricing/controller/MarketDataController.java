@@ -95,7 +95,7 @@ public class MarketDataController {
             @RequestParam double price,
             @RequestParam String retailer,
             @RequestParam String region) {
-        marketDataService.trackProductPrice(productName, brand, "RETAIL", unit, price, retailer, region);
+        marketDataService.trackProductPrice(productName, brand, "RETAIL", unit, price, retailer, region, null);
         return ResponseEntity.ok("Price reported successfully for " + productName);
     }
 
